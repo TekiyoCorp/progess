@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: NextRequest) {
   try {
     const { command } = await request.json();
@@ -15,6 +11,18 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🤖 [AI Command] Received:', command);
+
+    // Instancier OpenAI uniquement si l'API key est disponible
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OpenAI API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
     // Récupérer le contexte (tâches, problèmes, dossiers)
     let tasks: any[] = [];

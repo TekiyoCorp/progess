@@ -2,13 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// OpenAI instance will be created in POST handler
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🎯 [Prioritize] Starting smart prioritization...');
+        // Check OpenAI API key
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OpenAI API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
+console.log('🎯 [Prioritize] Starting smart prioritization...');
 
     if (!supabase) {
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
