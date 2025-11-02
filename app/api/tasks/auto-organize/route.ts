@@ -55,10 +55,10 @@ Tâche actuelle:
 - Entité: ${task.entity?.name} (${task.entity?.type})
 
 Tâches liées à cette entité (${relatedTasks?.length || 0}):
-${relatedTasks?.map(t => `- ${t.title}`).join('\n') || 'Aucune'}
+${relatedTasks?.map((t: any) => `- ${t.title}`).join('\n') || 'Aucune'}
 
 Dossiers existants (${folders?.length || 0}):
-${folders?.map(f => `- ${f.name}`).join('\n') || 'Aucun'}
+${folders?.map((f: any) => `- ${f.name}`).join('\n') || 'Aucun'}
 
 Décide:
 1. Faut-il créer un nouveau dossier ?

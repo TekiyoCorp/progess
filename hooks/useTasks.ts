@@ -66,12 +66,12 @@ export function useTasks() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'tasks' },
-          (payload) => {
+          (payload: any) => {
             console.log('🔥 [Tasks] Realtime event:', payload.eventType, payload.new);
             fetchTasks();
           }
         )
-        .subscribe((status) => {
+        .subscribe((status: any) => {
           console.log('📡 [Tasks] Subscription status:', status);
         });
       

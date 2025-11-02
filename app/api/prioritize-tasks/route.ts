@@ -43,7 +43,7 @@ Analyse ces tâches et réorganise-les par priorité absolue en fonction de:
 4. **Type** - call > dev > content > other
 
 Tâches à analyser:
-${tasks.map(t => `
+${tasks.map((t: any) => `
 ID: ${t.id}
 Titre: ${t.title}
 CA Impact: ${t.percentage}%

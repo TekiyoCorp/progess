@@ -40,6 +40,10 @@ export async function POST(request: NextRequest) {
     };
 
     // Récupérer la tâche actuelle
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase client not available' }, { status: 500 });
+    }
+    
     const { data: task, error: taskError } = await supabase
       .from('tasks')
       .select('attachments')

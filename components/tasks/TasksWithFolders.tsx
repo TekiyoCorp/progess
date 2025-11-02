@@ -18,7 +18,7 @@ interface TasksWithFoldersProps {
   onArchive?: (id: string) => void;
   onBlock?: (id: string, reason: string) => void;
   onRefetch?: () => Promise<void>;
-  onCreateTask?: (task: any) => Promise<void>;
+  onCreateTask?: (task: any) => Promise<any>;
 }
 
 export function TasksWithFolders({ 

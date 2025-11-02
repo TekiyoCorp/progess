@@ -36,7 +36,7 @@ export function EntityClassificationModal({ isOpen, entityName, onClassify, onCl
   if (!isOpen) return null;
 
   return (
-    <DarkVeilWrapper onClose={onClose}>
+    <DarkVeilWrapper isOpen={true} onClose={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}

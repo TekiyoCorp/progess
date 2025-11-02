@@ -22,12 +22,12 @@ export function useFolders() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'folders' },
-          (payload) => {
+          (payload: any) => {
             console.log('🔥 [Folders] Realtime event:', payload.eventType, payload.new);
             fetchFolders();
           }
         )
-        .subscribe((status) => {
+        .subscribe((status: any) => {
           console.log('📡 [Folders] Subscription status:', status);
         });
       

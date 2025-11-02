@@ -18,7 +18,7 @@ export function useGoogleCalendar() {
 
     // Listen for auth state changes
     if (supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
         console.log('🔐 [Calendar] Auth state changed:', _event);
         if (session?.provider_token) {
           console.log('✅ [Calendar] Got provider token from auth change');

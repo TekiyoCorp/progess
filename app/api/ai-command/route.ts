@@ -42,12 +42,12 @@ export async function POST(request: NextRequest) {
           content: `Tu es l'assistant intelligent de Zak (Tekiyo, agence web premium).
 
 Contexte actuel:
-- ${tasks.length} tâches (${tasks.filter(t => !t.completed).length} en cours)
+- ${tasks.length} tâches (${tasks.filter((t: any) => !t.completed).length} en cours)
 - ${problems.length} problèmes
 - ${folders.length} dossiers
 
 Tâches récentes:
-${tasks.slice(0, 10).map(t => `- ${t.title} (${t.percentage}%) ${t.completed ? '✓' : ''}`).join('\n')}
+${tasks.slice(0, 10).map((t: any) => `- ${t.title} (${t.percentage}%) ${t.completed ? '✓' : ''}`).join('\n')}
 
 Ta mission: analyser la commande utilisateur et décider quelle action effectuer.
 

@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
           content: `Tu es l'assistant de Zak (Tekiyo). Analyse ses tâches complétées et détecte les ROUTINES RÉCURRENTES.
 
 Tâches des 30 derniers jours:
-${tasks.slice(0, 100).map(t => `- ${t.title} (${new Date(t.created_at).toLocaleDateString('fr-FR')})`).join('\n')}
+${tasks.slice(0, 100).map((t: any) => `- ${t.title} (${new Date(t.created_at).toLocaleDateString('fr-FR')})`).join('\n')}
 
 Détecte les patterns:
 1. Tâches qui reviennent régulièrement (ex: "Check emails", "Facturation", "Réunion équipe")

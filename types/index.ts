@@ -72,6 +72,7 @@ export interface Folder {
   order_index?: number;
   color?: string;
   summary?: string;
+  price?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -86,6 +87,7 @@ export interface UpdateFolderInput {
   id: string;
   name?: string;
   order_index?: number;
+  price?: number;
   color?: string;
   summary?: string;
 }

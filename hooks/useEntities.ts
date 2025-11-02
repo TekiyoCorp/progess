@@ -21,7 +21,7 @@ export function useEntities() {
         if (error) {
           console.warn('⚠️ [Entities] Table may not exist yet:', error.message);
           // Utiliser localStorage en fallback
-          const localData = loadFromLocalStorage<Entity[]>(STORAGE_KEY);
+          const localData = loadFromLocalStorage<Entity[]>(STORAGE_KEY, []);
           setEntities(localData);
           setLoading(false);
           return;
@@ -30,12 +30,12 @@ export function useEntities() {
         setEntities(data || []);
         saveToLocalStorage(STORAGE_KEY, data || []);
       } else {
-        const localData = loadFromLocalStorage<Entity[]>(STORAGE_KEY);
+        const localData = loadFromLocalStorage<Entity[]>(STORAGE_KEY, []);
         setEntities(localData);
       }
     } catch (error) {
       console.warn('⚠️ [Entities] Fetch failed, using localStorage:', error);
-      const localData = loadFromLocalStorage<Entity[]>(STORAGE_KEY);
+      const localData = loadFromLocalStorage<Entity[]>(STORAGE_KEY, []);
       setEntities(localData);
     } finally {
       setLoading(false);

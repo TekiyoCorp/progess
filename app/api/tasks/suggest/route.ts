@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
           content: `Tu es l'assistant de Zak (Tekiyo, agence web). Analyse l'input utilisateur et suggère 3 tâches similaires basées sur l'historique. 
 
 Historique des tâches:
-${allTasks.slice(0, 50).map(t => `- ${t.title}`).join('\n')}
+${allTasks.slice(0, 50).map((t: any) => `- ${t.title}`).join('\n')}
 
 Réponds UNIQUEMENT en JSON:
 {

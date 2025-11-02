@@ -47,9 +47,8 @@ export function CalendarOverlay({ isOpen, onClose, tasks, onDateClick }: Calenda
   // Get task icon/avatar
   const getTaskIcon = (task: Task) => {
     if (task.type === 'call') return '📞';
-    if (task.type === 'design') return '💻';
-    if (task.type === 'video') return '🎥';
-    if (task.type === 'email') return '📧';
+    if (task.type === 'dev') return '💻';
+    if (task.type === 'content') return '📝';
     return '📋';
   };
 

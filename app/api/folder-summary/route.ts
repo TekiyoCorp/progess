@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // Format tasks for AI
     const tasksList = tasks
-      .map(t => `- ${t.title} (${t.percentage}%, ${t.completed ? 'complétée' : 'en cours'})`)
+      .map((t: any) => `- ${t.title} (${t.percentage}%, ${t.completed ? 'complétée' : 'en cours'})`)
       .join('\n');
 
     console.log('[folder-summary] Calling OpenAI API...');

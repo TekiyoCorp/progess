@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Problem, CreateProblemInput, UpdateProblemInput } from '@/types';
+import { Problem, CreateProblemInput } from '@/types';
 import { saveToLocalStorage, loadFromLocalStorage } from '@/lib/utils';
 
 const STORAGE_KEY = 'tekiyo_problems';
@@ -61,12 +61,12 @@ export function useProblems() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'problems' },
-          (payload) => {
+          (payload: any) => {
             console.log('🔥 [Problems] Realtime event:', payload.eventType, payload.new);
             fetchProblems();
           }
         )
-        .subscribe((status) => {
+        .subscribe((status: any) => {
           console.log('📡 [Problems] Subscription status:', status);
         });
       
@@ -144,13 +144,12 @@ export function useProblems() {
           title: input.title,
           solved: false,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         };
         
         console.log('💾 [Problems] Problem created locally:', newProblem.id);
         
         setProblems(prev => {
-          const updated = [...prev, newProblem];
+          const updated = [...prev, newProblem!];
           saveToLocalStorage(STORAGE_KEY, updated);
           return updated;
         });
@@ -170,7 +169,7 @@ export function useProblems() {
   }, []);
 
   // Update problem (juste pour la base de données)
-  const updateProblem = useCallback(async (input: UpdateProblemInput): Promise<void> => {
+  const updateProblem = useCallback(async (input: Partial<Problem> & { id: string }): Promise<void> => {
     console.log('💾 [Problems] Saving to Supabase:', input.id);
     
     if (!supabase) return;
