@@ -68,7 +68,7 @@ export function useSearch() {
         if (filters.status === 'pending' && task.completed) return false;
         
         // Filtre par date
-        if (filters.dateRange) {
+        if (filters.dateRange && task.created_at) {
           const taskDate = new Date(task.created_at);
           if (taskDate < filters.dateRange.start || taskDate > filters.dateRange.end) {
             return false;
@@ -123,7 +123,7 @@ export function useSearch() {
         id: folder.id,
         type: 'folder' as SearchResultType,
         title: folder.name,
-        subtitle: folder.summary || `${folder.tasks?.length || 0} tâche(s)`,
+        subtitle: folder.summary || `${(folder as any).tasks?.length || 0} tâche(s)`,
         data: folder,
         match: folder.name,
       }));

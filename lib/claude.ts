@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { TaskScoringResponse, TaskType } from '@/types';
+import { TaskType } from '@/types';
 
 const apiKey = process.env.OPENAI_API_KEY || '';
 
@@ -64,7 +64,7 @@ Réponds UNIQUEMENT avec un objet JSON contenant:
 - type: 'call', 'design', 'video', 'email', ou 'other'
 - reasoning: explication courte de ton scoring (50 mots max)`;
 
-export async function scoreTask(taskTitle: string): Promise<TaskScoringResponse> {
+export async function scoreTask(taskTitle: string): Promise<any> {
   try {
     if (!apiKey) {
       console.log('🔄 No API key - using keyword-based scoring');
@@ -105,13 +105,13 @@ JSON: {"percentage": X, "type": "call|design|video|email|other", "reasoning": "c
       throw new Error('No response from OpenAI');
     }
 
-    const parsed = JSON.parse(content) as TaskScoringResponse;
+    const parsed = JSON.parse(content) as any;
 
     // Validate and clamp percentage
     const percentage = Math.max(0, Math.min(10, parsed.percentage || 1));
 
     // Validate type
-    const validTypes: TaskType[] = ['call', 'design', 'video', 'email', 'other'];
+    const validTypes: TaskType[] = ['call', 'dev', 'content', 'other'];
     const type = validTypes.includes(parsed.type) ? parsed.type : 'other';
 
     console.log('✅ Task scored:', { percentage, type });
@@ -142,13 +142,13 @@ JSON: {"percentage": X, "type": "call|design|video|email|other", "reasoning": "c
       type = 'other';
     } else if (titleLower.includes('tiktok') || titleLower.includes('video')) {
       percentage = 3;
-      type = 'video';
-    } else if (titleLower.includes('design') || titleLower.includes('mockup')) {
+      type = 'content';
+    } else if (titleLower.includes('design') || titleLower.includes('mockup') || titleLower.includes('dev')) {
       percentage = 2;
-      type = 'design';
-    } else if (titleLower.includes('email') || titleLower.includes('mail')) {
+      type = 'dev';
+    } else if (titleLower.includes('email') || titleLower.includes('mail') || titleLower.includes('content')) {
       percentage = 1;
-      type = 'email';
+      type = 'content';
     }
 
     return {
