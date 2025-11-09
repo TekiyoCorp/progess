@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Problem, CreateProblemInput } from '@/types';
 import { saveToLocalStorage, loadFromLocalStorage } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 
 const STORAGE_KEY = 'tekiyo_problems';
 
@@ -20,7 +21,7 @@ export function useProblems() {
     try {
       // Check if supabase is available
       if (!supabase) {
-        console.log('Using localStorage for problems');
+        logger.info('Using localStorage for problems');
         const localProblems = loadFromLocalStorage<Problem[]>(STORAGE_KEY, []);
         setProblems(localProblems);
         setLoading(false);
@@ -39,7 +40,7 @@ export function useProblems() {
         saveToLocalStorage(STORAGE_KEY, data);
       }
     } catch (error) {
-      console.error('Error fetching problems:', error);
+      logger.error('Error fetching problems:', error);
       // Fallback to localStorage
       const localProblems = loadFromLocalStorage<Problem[]>(STORAGE_KEY, []);
       setProblems(localProblems);
@@ -54,7 +55,7 @@ export function useProblems() {
     
     // Supabase Realtime subscription
     if (supabase) {
-      console.log('📡 [Problems] Setting up Realtime subscription...');
+      logger.info('📡 [Problems] Setting up Realtime subscription...');
       
       const channel = supabase
         .channel('public:problems')
@@ -62,16 +63,16 @@ export function useProblems() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'problems' },
           (payload: any) => {
-            console.log('🔥 [Problems] Realtime event:', payload.eventType, payload.new);
+            logger.info('🔥 [Problems] Realtime event:', payload.eventType, payload.new);
             fetchProblems();
           }
         )
         .subscribe((status: any) => {
-          console.log('📡 [Problems] Subscription status:', status);
+          logger.info('📡 [Problems] Subscription status:', status);
         });
       
       return () => {
-        console.log('🔌 [Problems] Cleaning up Realtime subscription...');
+        logger.info('🔌 [Problems] Cleaning up Realtime subscription...');
         supabase.removeChannel(channel);
       };
     }
@@ -91,7 +92,7 @@ export function useProblems() {
       const problem = problems.find(p => p.id === problemId);
       
       if (problem && !problem.solved) {
-        console.log('🤖 [Problems] Problem found in state, auto-solving...', problemId);
+        logger.info('🤖 [Problems] Problem found in state, auto-solving...', problemId);
         pendingAutoSolveRef.current = null; // Clear le flag AVANT d'appeler (éviter double appel)
         
         // Petit délai pour laisser React finir son cycle de render
@@ -107,7 +108,7 @@ export function useProblems() {
   // Create problem
   const createProblem = useCallback(async (input: CreateProblemInput): Promise<Problem | null> => {
     try {
-      console.log('➕ [Problems] Creating problem:', input.title);
+      logger.info('➕ [Problems] Creating problem:', input.title);
       let newProblem: Problem | null = null;
 
       // Try Supabase first
@@ -133,7 +134,7 @@ export function useProblems() {
             });
           }
         } catch (dbError) {
-          console.log('⚠️ [Problems] Supabase unavailable, using localStorage');
+          logger.info('⚠️ [Problems] Supabase unavailable, using localStorage');
         }
       }
 
@@ -146,7 +147,7 @@ export function useProblems() {
           created_at: new Date().toISOString(),
         };
         
-        console.log('💾 [Problems] Problem created locally:', newProblem.id);
+        logger.info('💾 [Problems] Problem created locally:', newProblem.id);
         
         setProblems(prev => {
           const updated = [...prev, newProblem!];
@@ -157,20 +158,20 @@ export function useProblems() {
 
       // Marquer le problème pour auto-solve (sera résolu par useEffect)
       if (newProblem) {
-        console.log('📝 [Problems] Marking problem for auto-solve:', newProblem.id);
+        logger.info('📝 [Problems] Marking problem for auto-solve:', newProblem.id);
         pendingAutoSolveRef.current = newProblem.id;
       }
 
       return newProblem;
     } catch (error) {
-      console.error('❌ [Problems] Error creating problem:', error);
+      logger.error('❌ [Problems] Error creating problem:', error);
       return null;
     }
   }, []);
 
   // Update problem (juste pour la base de données)
   const updateProblem = useCallback(async (input: Partial<Problem> & { id: string }): Promise<void> => {
-    console.log('💾 [Problems] Saving to Supabase:', input.id);
+    logger.info('💾 [Problems] Saving to Supabase:', input.id);
     
     if (!supabase) return;
     
@@ -185,9 +186,9 @@ export function useProblems() {
         .eq('id', input.id);
 
       if (error) throw error;
-      console.log('✅ [Problems] Saved to Supabase');
+      logger.info('✅ [Problems] Saved to Supabase');
     } catch (error) {
-      console.error('❌ [Problems] Supabase error:', error);
+      logger.error('❌ [Problems] Supabase error:', error);
     }
   }, []);
 
@@ -207,7 +208,7 @@ export function useProblems() {
         return filtered;
       });
     } catch (error) {
-      console.error('Error deleting problem:', error);
+      logger.error('Error deleting problem:', error);
       
       // Fallback: delete locally
       setProblems(prev => {
@@ -220,7 +221,7 @@ export function useProblems() {
 
   // Solve problem with AI
   const solveProblemWithAI = useCallback(async (id: string): Promise<void> => {
-    console.log('🔍 [Problems] Looking for problem:', id);
+    logger.info('🔍 [Problems] Looking for problem:', id);
     setSolving(id);
 
     try {
@@ -229,12 +230,12 @@ export function useProblems() {
       const problem = storedProblems.find(p => p.id === id);
       
       if (!problem) {
-        console.error('❌ [Problems] Problem not found:', id);
+        logger.error('❌ [Problems] Problem not found:', id);
         setSolving(null);
         return;
       }
 
-      console.log('🤖 [Problems] Solving problem:', problem.title);
+      logger.info('🤖 [Problems] Solving problem:', problem.title);
 
       const response = await fetch('/api/solve-problem', {
         method: 'POST',
@@ -250,7 +251,7 @@ export function useProblems() {
 
       const { solution, taskCreated } = await response.json();
       
-      console.log('✅ [Problems] Solution received:', solution.substring(0, 50) + '...');
+      logger.info('✅ [Problems] Solution received:', solution.substring(0, 50) + '...');
 
       // FORCER un nouveau tableau et un nouvel objet pour que React détecte le changement
       setProblems(prevProblems => {
@@ -258,7 +259,7 @@ export function useProblems() {
         const updatedProblems = prevProblems.map(p => {
           if (p.id === id) {
             found = true;
-            console.log('🎯 [Problems] Updating problem:', p.title);
+            logger.info('🎯 [Problems] Updating problem:', p.title);
             // Créer un NOUVEL objet pour forcer le re-render (nouvelle référence)
             return {
               ...p,
@@ -272,14 +273,14 @@ export function useProblems() {
         
         // SOLUTION 2 : FALLBACK - Si le problème n'est pas dans prevProblems
         if (!found) {
-          console.warn('⚠️ [Problems] Problem not found in state, loading from localStorage and adding...', id);
+          logger.warn('⚠️ [Problems] Problem not found in state, loading from localStorage and adding...', id);
           
           // Charger depuis localStorage (source de vérité)
           const storedProblems = loadFromLocalStorage<Problem[]>(STORAGE_KEY, []);
           const problemFromStorage = storedProblems.find(p => p.id === id);
           
           if (problemFromStorage) {
-            console.log('✅ [Problems] Found in localStorage, adding to state:', problemFromStorage.title);
+            logger.info('✅ [Problems] Found in localStorage, adding to state:', problemFromStorage.title);
             // Ajouter le problème depuis localStorage et le mettre à jour
             const updatedWithNew = [...prevProblems, {
               ...problemFromStorage,
@@ -291,12 +292,12 @@ export function useProblems() {
             saveToLocalStorage(STORAGE_KEY, updatedWithNew);
             return updatedWithNew;
           } else {
-            console.error('❌ [Problems] Problem not found anywhere:', id);
+            logger.error('❌ [Problems] Problem not found anywhere:', id);
             return prevProblems; // Impossible de mettre à jour, garder l'état actuel
           }
         }
         
-        console.log('🔄 [Problems] Updated', updatedProblems.length, 'problems');
+        logger.info('🔄 [Problems] Updated', updatedProblems.length, 'problems');
         saveToLocalStorage(STORAGE_KEY, updatedProblems);
         
         // Sauvegarder en base (async, ne pas attendre)
@@ -305,11 +306,11 @@ export function useProblems() {
             id,
             solution,
             solved: true,
-          }).catch(err => console.error('❌ [Problems] Failed to save to Supabase:', err));
+          }).catch(err => logger.error('❌ [Problems] Failed to save to Supabase:', err));
         }
         
         if (taskCreated) {
-          console.log('✅ [Problems] Task created to apply solution');
+          logger.info('✅ [Problems] Task created to apply solution');
           // Realtime s'occupera de la mise à jour automatique
         }
         
@@ -318,7 +319,7 @@ export function useProblems() {
       
       setSolving(null);
     } catch (error) {
-      console.error('❌ [Problems] Error solving problem:', error);
+      logger.error('❌ [Problems] Error solving problem:', error);
       setSolving(null);
     }
   }, [updateProblem]);

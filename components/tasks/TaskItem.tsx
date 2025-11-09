@@ -23,18 +23,13 @@ interface TaskItemProps {
   onArchive?: (id: string) => void;
   onBlock?: (id: string, reason: string) => void;
   onRefetch?: () => Promise<void>;
+  onSendToAI?: (taskTitle: string) => void;
+  onAddToFolder?: (taskId: string, folderId: string) => void;
+  folders?: any[];
 }
 
-export function TaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onBlock, onRefetch }: TaskItemProps) {
+export function TaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onBlock, onRefetch, onSendToAI, onAddToFolder, folders = [] }: TaskItemProps) {
   const { updateTask } = useTasks();
-  const [showTip, setShowTip] = useState(false);
-  const [tip, setTip] = useState(() => {
-    const tips = JSON.parse(localStorage.getItem('task_tips') || '{}');
-    return tips[task.id] || '';
-  });
-  const [loading, setLoading] = useState(false);
-  const [displayedTip, setDisplayedTip] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   
   // Context menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -65,74 +60,6 @@ export function TaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onB
       console.log('📅 [TaskItem] Task with date:', task.title, '→', task.event_start);
     }
   }, [task.event_start, task.title]);
-
-  // Effet de typing lettre par lettre
-  useEffect(() => {
-    if (!showTip || !tip) return;
-
-    setIsTyping(true);
-    setDisplayedTip('');
-    let currentIndex = 0;
-
-    const typingInterval = setInterval(() => {
-      if (currentIndex < tip.length) {
-        setDisplayedTip(tip.slice(0, currentIndex + 1));
-        currentIndex++;
-      } else {
-        setIsTyping(false);
-        clearInterval(typingInterval);
-      }
-    }, 20); // 20ms entre chaque lettre
-
-    return () => clearInterval(typingInterval);
-  }, [tip, showTip]);
-
-  const getTip = async () => {
-    // Si on a déjà un conseil, toggle l'affichage
-    if (tip) {
-      setShowTip(!showTip);
-      return;
-    }
-
-    // Sinon, charger depuis l'API
-    setLoading(true);
-    try {
-      const res = await fetch('/api/solve-problem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: `Conseil pour: ${task.title}`,
-          createTask: false, // Ne pas créer de tâche pour un conseil
-        }),
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        let newTip = data.solution;
-        
-        // Nettoyer le texte : enlever **Action**: et tous les préfixes similaires
-        newTip = newTip
-          .replace(/\*\*Action\*\*:\s*/gi, '')           // **Action**:
-          .replace(/\*\*Action\*\*/gi, '')               // **Action**
-          .replace(/Action:\s*/gi, '')                   // Action:
-          .replace(/^\*\*[^*]+\*\*:\s*/gm, '')          // **Autre**:
-          .replace(/^\d+\.\s*\*\*Action\*\*:\s*/gm, '') // 1. **Action**:
-          .replace(/^[-•]\s*\*\*Action\*\*:\s*/gm, '')  // - **Action**:
-          .trim();
-        
-        // Sauvegarder
-        const tips = JSON.parse(localStorage.getItem('task_tips') || '{}');
-        tips[task.id] = newTip;
-        localStorage.setItem('task_tips', JSON.stringify(tips));
-        
-        setTip(newTip);
-        setShowTip(true);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    }
-    setLoading(false);
-  };
 
   // État pour l'édition de la date
   const [isEditingDate, setIsEditingDate] = useState(false);
@@ -264,21 +191,6 @@ export function TaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onB
           )}
         </div>
 
-        {/* Bouton IA */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 opacity-0 group-hover:opacity-100 h-5 w-5"
-          onClick={getTip}
-          disabled={loading}
-        >
-          {loading ? (
-            <div className="w-3 h-3 border-2 border-pink-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <Image src="/star.svg" alt="" width={12} height={12} />
-          )}
-        </Button>
-
         <Button
           variant="ghost"
           size="icon"
@@ -341,35 +253,6 @@ export function TaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onB
         </div>
         );
       })()}
-
-        {/* Conseil IA en dessous */}
-        <AnimatePresence>
-          {showTip && displayedTip && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="overflow-hidden"
-            >
-              <div className="flex items-start gap-2">
-                <Image src="/star.svg" alt="" width={12} height={12} className="shrink-0 mt-0.5" />
-                <p 
-                  className="text-xs leading-relaxed flex-1 break-words"
-                  style={{
-                    background: 'linear-gradient(to right, rgb(244, 114, 182), rgb(168, 85, 247), rgb(96, 165, 250))',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                  }}
-                >
-                  {displayedTip}
-                  {isTyping && <span className="animate-pulse">▋</span>}
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </motion.div>
 
       {/* Context Menu */}
@@ -382,6 +265,10 @@ export function TaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onB
             onDuplicate={() => onDuplicate?.(task.id)}
             onArchive={() => onArchive?.(task.id)}
             onBlock={(reason) => onBlock?.(task.id, reason)}
+            onSendToAI={onSendToAI}
+            onAddToFolder={(folderId) => onAddToFolder?.(task.id, folderId)}
+            folders={folders}
+            taskTitle={task.title}
           />
         )}
       </AnimatePresence>

@@ -13,9 +13,12 @@ interface DraggableTaskItemProps {
   onArchive?: (id: string) => void;
   onBlock?: (id: string, reason: string) => void;
   onRefetch?: () => Promise<void>;
+  onSendToAI?: (taskTitle: string) => void;
+  onAddToFolder?: (taskId: string, folderId: string) => void;
+  folders?: any[];
 }
 
-export function DraggableTaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onBlock, onRefetch }: DraggableTaskItemProps) {
+export function DraggableTaskItem({ task, onToggle, onDelete, onDuplicate, onArchive, onBlock, onRefetch, onSendToAI, onAddToFolder, folders = [] }: DraggableTaskItemProps) {
   // Make task draggable
   const { attributes, listeners, setNodeRef: setDragNodeRef, transform, isDragging } = useDraggable({
     id: `task-${task.id}`,
@@ -63,6 +66,9 @@ export function DraggableTaskItem({ task, onToggle, onDelete, onDuplicate, onArc
         onArchive={onArchive}
         onBlock={onBlock}
         onRefetch={onRefetch}
+        onSendToAI={onSendToAI}
+        onAddToFolder={onAddToFolder}
+        folders={folders}
       />
     </div>
   );

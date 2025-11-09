@@ -17,17 +17,17 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-const { folders, goal } = await request.json();
+const { folders, goal, tasks = [] } = await request.json();
 
     console.log('💰 [API] Received folders:', JSON.stringify(folders, null, 2));
 
-    // Calculer le CA basé uniquement sur les prix des dossiers
-    const totalRevenue = folders.reduce((sum: number, folder: any) => {
-      console.log(`💰 [API] Folder "${folder.name}": price=${folder.price}`);
-      return sum + (folder.price || 0);
-    }, 0);
+    // Calculer le CA basé sur les prix des dossiers et leur complétion
+    const { calculateRevenueFromFolders } = await import('@/lib/revenue');
     
-    console.log('💰 [API] Total revenue calculated:', totalRevenue);
+    // Calculer le CA réel depuis les dossiers et tâches
+    const totalRevenue = calculateRevenueFromFolders(folders, tasks);
+    
+    console.log('💰 [API] Total revenue calculated from folders:', totalRevenue);
 
     // Calculer le CA confirmé (dossiers 100% complétés) vs potentiel
     const confirmedRevenue = folders

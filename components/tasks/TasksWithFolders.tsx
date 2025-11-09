@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { DndContext, DragEndEvent, DragOverlay, PointerSensor, useSensor, useSensors, DragStartEvent } from '@dnd-kit/core';
 import { Task, Folder } from '@/types';
 import { DraggableTaskItem } from './DraggableTaskItem';
-import { FolderItem } from '@/components/folders/FolderItem';
 import { TaskItem } from './TaskItem';
 import { AnimatePresence } from 'framer-motion';
 import { useFolders } from '@/hooks/useFolders';
+import { logger } from '@/lib/logger';
 
 interface TasksWithFoldersProps {
   tasks: Task[];
@@ -19,6 +19,9 @@ interface TasksWithFoldersProps {
   onBlock?: (id: string, reason: string) => void;
   onRefetch?: () => Promise<void>;
   onCreateTask?: (task: any) => Promise<any>;
+  onSendToAI?: (taskTitle: string) => void;
+  onAddToFolder?: (taskId: string, folderId: string) => void;
+  folders?: any[];
 }
 
 export function TasksWithFolders({ 
@@ -31,12 +34,11 @@ export function TasksWithFolders({
   onBlock,
   onRefetch,
   onCreateTask,
+  onSendToAI,
+  onAddToFolder,
+  folders = [],
 }: TasksWithFoldersProps) {
   const { 
-    folders, 
-    generatingSummary,
-    updateFolder, 
-    deleteFolder, 
     createFolder,
     generateFolderSummary,
   } = useFolders();
@@ -51,12 +53,8 @@ export function TasksWithFolders({
     })
   );
 
-  // Séparer les tâches : celles dans des dossiers et celles sans dossier
+  // Ne montrer que les tâches sans dossier (les dossiers sont dans l'overlay)
   const tasksWithoutFolder = tasks.filter(t => !t.folder_id);
-  const tasksInFolders = folders.map(folder => ({
-    folder,
-    tasks: tasks.filter(t => t.folder_id === folder.id),
-  }));
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -69,7 +67,7 @@ export function TasksWithFolders({
     const { active, over } = event;
     setActiveTask(null);
 
-    console.log('🎯 Drag ended:', {
+    logger.info('🎯 Drag ended:', {
       activeId: active.id,
       overId: over?.id,
       activeData: active.data.current,
@@ -77,21 +75,21 @@ export function TasksWithFolders({
     });
 
     if (!over) {
-      console.log('❌ No drop target');
+      logger.info('❌ No drop target');
       return;
     }
 
     const draggedTask = active.data.current?.task as Task;
     if (!draggedTask) {
-      console.log('❌ No dragged task');
+      logger.info('❌ No dragged task');
       return;
     }
 
-    console.log('✅ Dragged task:', draggedTask.title);
+    logger.info('✅ Dragged task:', draggedTask.title);
 
     // Case 1: Dropped on a folder
     if (over.data.current?.type === 'folder') {
-      console.log('📁 Dropped on folder');
+      logger.info('📁 Dropped on folder');
       const folderId = over.data.current.folderId;
       onUpdateTask(draggedTask.id, folderId);
       
@@ -106,67 +104,54 @@ export function TasksWithFolders({
     // Case 2: Dropped on another task (create folder)
     if (over.data.current?.type === 'task') {
       const targetTask = over.data.current.task as Task;
-      console.log('📋 Dropped on task:', targetTask.title);
+      logger.info('📋 Dropped on task:', targetTask.title);
       
       // Don't create folder if dropped on itself
       if (draggedTask.id === targetTask.id) {
-        console.log('⚠️ Dropped on itself, skipping');
+        logger.info('⚠️ Dropped on itself, skipping');
         return;
       }
       
       // Don't create folder if both tasks are already in the same folder
       if (draggedTask.folder_id && draggedTask.folder_id === targetTask.folder_id) {
-        console.log('⚠️ Both tasks already in same folder, skipping');
+        logger.info('⚠️ Both tasks already in same folder, skipping');
         return;
       }
 
-      console.log('🆕 Creating new folder...');
+      logger.info('🆕 Creating new folder...');
       
       // Create new folder
       const newFolder = await createFolder({
         name: `${draggedTask.title.slice(0, 20)}...`,
       });
 
-      console.log('📁 New folder created:', newFolder);
+      logger.info('📁 New folder created:', newFolder);
 
       if (newFolder) {
         // Add both tasks to the folder
-        console.log('➕ Adding tasks to folder...');
+        logger.info('➕ Adding tasks to folder...');
         await onUpdateTask(draggedTask.id, newFolder.id);
         if (!targetTask.folder_id) {
           await onUpdateTask(targetTask.id, newFolder.id);
         }
         
         // Generate summary
-        console.log('🤖 Generating summary...');
+        logger.info('🤖 Generating summary...');
         generateFolderSummary(newFolder.id, [draggedTask, targetTask]);
       } else {
-        console.error('❌ Failed to create folder');
+        logger.error('❌ Failed to create folder');
       }
       return;
     }
 
-    console.log('🔄 Dropped on empty space');
+    logger.info('🔄 Dropped on empty space');
     // Case 3: Dropped on empty space (remove from folder)
     if (draggedTask.folder_id) {
-      console.log('📤 Removing task from folder');
+      logger.info('📤 Removing task from folder');
       onUpdateTask(draggedTask.id, null);
     }
   };
 
-  const handleRenameFolder = (folderId: string, newName: string) => {
-    updateFolder({ id: folderId, name: newName });
-  };
-
-  const handleDeleteFolder = (folderId: string) => {
-    // Remove folder_id from all tasks in this folder
-    const tasksInFolder = tasks.filter(t => t.folder_id === folderId);
-    tasksInFolder.forEach(task => {
-      onUpdateTask(task.id, null);
-    });
-    
-    deleteFolder(folderId);
-  };
 
   return (
     <DndContext 
@@ -175,27 +160,7 @@ export function TasksWithFolders({
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-2 pt-2">
-        {/* Render folders with their tasks */}
-        {tasksInFolders.map(({ folder, tasks: folderTasks }) => (
-          <FolderItem
-            key={folder.id}
-            folder={folder}
-            tasks={folderTasks}
-            onRename={handleRenameFolder}
-            onDelete={handleDeleteFolder}
-            onToggleTask={onToggle}
-            onDeleteTask={onDelete}
-            onDuplicateTask={onDuplicate}
-            onArchiveTask={onArchive}
-            onBlockTask={onBlock}
-            onGenerateSummary={generateFolderSummary}
-            isGeneratingSummary={generatingSummary === folder.id}
-            onRefetch={onRefetch}
-            onUpdateFolder={(id, updates) => updateFolder({ id, ...updates })}
-          />
-        ))}
-
-        {/* Render tasks without folder */}
+        {/* Render tasks without folder (folders are in overlay) */}
         <AnimatePresence mode="popLayout">
           {tasksWithoutFolder.map((task) => (
             <DraggableTaskItem
@@ -207,6 +172,9 @@ export function TasksWithFolders({
               onArchive={onArchive}
               onBlock={onBlock}
               onRefetch={onRefetch}
+              onSendToAI={onSendToAI}
+              onAddToFolder={onAddToFolder}
+              folders={folders}
             />
           ))}
         </AnimatePresence>

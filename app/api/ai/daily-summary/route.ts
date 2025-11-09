@@ -17,33 +17,57 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-const { tasks } = await request.json();
+const { tasks, folders = [], problems = [], currentAmount = 0, monthlyGoal = 50000 } = await request.json();
 
-    // Compter événements, emails, devis
-    const todayTasks = tasks.filter((t: any) => {
+    // Tâches critiques (non complétées, haut pourcentage)
+    const criticalTasks = tasks
+      .filter((t: any) => !t.completed && t.percentage >= 4)
+      .sort((a: any, b: any) => b.percentage - a.percentage)
+      .slice(0, 3);
+
+    // Tâches avec deadlines aujourd'hui ou cette semaine
+    const today = new Date();
+    const weekFromNow = new Date(today);
+    weekFromNow.setDate(today.getDate() + 7);
+    
+    const deadlineTasks = tasks.filter((t: any) => {
       if (!t.event_start) return false;
       const taskDate = new Date(t.event_start);
-      const today = new Date();
-      return taskDate.toDateString() === today.toDateString();
+      return taskDate >= today && taskDate <= weekFromNow && !t.completed;
+    }).slice(0, 5);
+
+    // Problèmes non résolus
+    const unsolvedProblems = problems.filter((p: any) => !p.solved).slice(0, 3);
+
+    // CA actuel vs objectif
+    const caProgress = ((currentAmount / monthlyGoal) * 100).toFixed(1);
+    const caGap = monthlyGoal - currentAmount;
+
+    // Dossiers en cours avec prix
+    const activeFolders = folders.filter((f: any) => {
+      const folderTasks = tasks.filter((t: any) => t.folder_id === f.id);
+      const completedCount = folderTasks.filter((t: any) => t.completed).length;
+      return folderTasks.length > 0 && completedCount < folderTasks.length;
     });
 
-    const events = todayTasks.filter((t: any) => t.title.toLowerCase().includes('meet') || t.title.toLowerCase().includes('appel'));
-    const emails = todayTasks.filter((t: any) => t.title.toLowerCase().includes('email') || t.title.toLowerCase().includes('mail'));
-    const devis = todayTasks.filter((t: any) => t.title.toLowerCase().includes('devis') || t.title.toLowerCase().includes('quote'));
+    const prompt = `Tu es l'assistant de Zak (Tekiyo). Génère un Daily Brief ultra concis et actionnable en français.
 
-    const nextEvent = events.find((e: any) => !e.completed);
+CONTEXTE:
+- CA actuel: ${currentAmount.toLocaleString()}€ / ${monthlyGoal.toLocaleString()}€ (${caProgress}%)
+- ${caGap > 0 ? `Gap: ${caGap.toLocaleString()}€ à combler` : 'Objectif atteint ! 🎉'}
 
-    const prompt = `Tu es un assistant intelligent. Génère un résumé naturel et concis de la journée en français.
+TÂCHES CRITIQUES (${criticalTasks.length}):
+${criticalTasks.map((t: any, i: number) => `${i + 1}. ${t.title} (${t.percentage}%)`).join('\n')}
 
-Données:
-- ${events.length} événements aujourd'hui
-- ${nextEvent ? `Prochain: ${nextEvent.title}` : 'Aucun événement à venir'}
-- ${emails.length} emails à envoyer
-- ${devis.length} devis en attente
+DEADLINES CETTE SEMAINE (${deadlineTasks.length}):
+${deadlineTasks.map((t: any) => `- ${t.title} (${new Date(t.event_start).toLocaleDateString('fr-FR')})`).join('\n')}
 
-Génère un texte fluide, naturel, en 2-3 phrases maximum. Style conversationnel, ton amical. Ne mets pas de puces ni de numéros.
+PROBLÈMES BLOQUANTS (${unsolvedProblems.length}):
+${unsolvedProblems.map((p: any) => `- ${p.title}`).join('\n')}
 
-Exemple: "3 événements aujourd'hui, prochain : Meet avec Julien à 14:00, 4 emails 💌 à envoyer et 2 devis en attente d'envoi."`;
+DOSSIERS ACTIFS: ${activeFolders.length} dossiers en cours
+
+Génère un résumé en 4-5 phrases max, ultra direct et actionnable. Style conversationnel mais business. Focus sur les actions prioritaires.`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -57,7 +81,7 @@ Exemple: "3 événements aujourd'hui, prochain : Meet avec Julien à 14:00, 4 em
           content: prompt,
         },
       ],
-      max_tokens: 100,
+      max_tokens: 400,
       temperature: 0.7,
     });
 

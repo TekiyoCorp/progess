@@ -2,22 +2,23 @@
 
 import { useTasks } from '@/hooks/useTasks';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
+import { useFolders } from '@/hooks/useFolders';
 import { TasksWithFolders } from '@/components/tasks/TasksWithFolders';
 import { TaskInput } from '@/components/tasks/TaskInput';
 import { TaskFilter } from '@/components/tasks/TaskFilter';
 import { RevenueInput } from '@/components/revenue/RevenueInput';
-import { AutoCreateNotification } from '@/components/tasks/AutoCreateNotification';
 import { MomentumTracker } from '@/components/ai/MomentumTracker';
 import { WinCelebration } from '@/components/ai/WinCelebration';
-import { ProcrastinationAlert } from '@/components/ai/ProcrastinationAlert';
+// import { ProcrastinationAlert } from '@/components/ai/ProcrastinationAlert'; // Désactivé
 import { Card } from '@/components/ui/card';
 import { GoogleCalendarButton } from '@/components/calendar/GoogleCalendarButton';
 import { CalendarEventItem } from '@/components/calendar/CalendarEventItem';
-import { CalendarButton } from '@/components/calendar/CalendarButton';
-import { SlashCommand } from '@/components/tasks/SlashCommandMenu';
+import { FoldersOverlay } from '@/components/folders/FoldersOverlay';
 import { Button } from '@/components/ui/button';
+import { Folder } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { logger } from '@/lib/logger';
 
 export function TasksColumn() {
   const {
@@ -36,6 +37,7 @@ export function TasksColumn() {
     refetch,
   } = useTasks();
 
+  const { folders } = useFolders();
   const { events, loading: eventsLoading, isAuthenticated, refreshEvents } = useCalendarEvents();
 
   // Utiliser une ref pour allTasks pour éviter les boucles infinies
@@ -47,30 +49,8 @@ export function TasksColumn() {
   // États pour les nouvelles fonctionnalités IA
   const [winTrigger, setWinTrigger] = useState<any>(null);
   const [revenueForecast, setRevenueForecast] = useState<any>(null);
+  const [showFoldersOverlay, setShowFoldersOverlay] = useState(false);
 
-  // État pour les notifications auto-création
-  const [autoCreateNotification, setAutoCreateNotification] = useState<{
-    originalTaskTitle: string;
-    suggestedTasks: any[];
-    isFollowUp?: boolean;
-  } | null>(null);
-
-  // Écouter les événements d'auto-création
-  useEffect(() => {
-    const handleAutoSuggested = (event: CustomEvent) => {
-      const { originalTask, suggestedTasks, isFollowUp } = event.detail;
-      setAutoCreateNotification({
-        originalTaskTitle: originalTask.title,
-        suggestedTasks,
-        isFollowUp,
-      });
-    };
-
-    window.addEventListener('tasks-auto-suggested', handleAutoSuggested as EventListener);
-    return () => {
-      window.removeEventListener('tasks-auto-suggested', handleAutoSuggested as EventListener);
-    };
-  }, []);
 
   // Fetch revenue forecast périodiquement
   useEffect(() => {
@@ -81,7 +61,7 @@ export function TasksColumn() {
       const foldersData = localStorage.getItem('folders');
       const folders = foldersData ? JSON.parse(foldersData) : [];
       
-      console.log('📊 [Forecast] Raw folders from localStorage:', folders);
+      logger.info('📊 [Forecast] Raw folders from localStorage:', folders);
       
       // Calculer le % de complétion pour chaque dossier
       const foldersWithCompletion = folders.map((folder: any) => {
@@ -91,7 +71,7 @@ export function TasksColumn() {
           ? Math.round((completedTasks / folderTasks.length) * 100)
           : 0;
         
-        console.log(`📁 [Forecast] Folder "${folder.name}": price=${folder.price}, completion=${completedPercentage}%, tasks=${folderTasks.length}`);
+        logger.info(`📁 [Forecast] Folder "${folder.name}": price=${folder.price}, completion=${completedPercentage}%, tasks=${folderTasks.length}`);
         
         return {
           ...folder,
@@ -99,19 +79,23 @@ export function TasksColumn() {
         };
       });
       
-      console.log('📊 [Forecast] Analyzing', folders.length, 'folders with completion:', foldersWithCompletion);
+      logger.info('📊 [Forecast] Analyzing', folders.length, 'folders with completion:', foldersWithCompletion);
       
       const response = await fetch('/api/ai/revenue-forecast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folders: foldersWithCompletion, goal }),
+        body: JSON.stringify({ 
+          folders: foldersWithCompletion, 
+          goal,
+          tasks: allTasks, // Envoyer les tâches pour le calcul précis
+        }),
       });
       if (response.ok) {
         const data = await response.json();
-        console.log('📊 [Forecast] Result:', data);
+        logger.info('📊 [Forecast] Result:', data);
         setRevenueForecast(data);
       } else {
-        console.error('❌ [Forecast] API error:', response.status);
+        logger.error('❌ [Forecast] API error:', response.status);
       }
     };
 
@@ -149,13 +133,13 @@ export function TasksColumn() {
   const syncCalendarEventsToTasks = useCallback(async () => {
     if (!isAuthenticated || events.length === 0) return;
 
-    console.log('🔄 [Sync] Syncing', events.length, 'calendar events to tasks...');
+    logger.info('🔄 [Sync] Syncing', events.length, 'calendar events to tasks...');
 
     for (const event of events) {
       const existingTask = allTasksRef.current.find(t => t.event_id === event.id);
       
       if (!existingTask) {
-        console.log('➕ [Sync] Creating task from event:', event.summary);
+        logger.info('➕ [Sync] Creating task from event:', event.summary);
         
         try {
           const newTask = await createTask({
@@ -176,7 +160,7 @@ export function TasksColumn() {
             });
           }
         } catch (error) {
-          console.error('❌ [Sync] Error creating task:', error);
+          logger.error('❌ [Sync] Error creating task:', error);
         }
       }
     }
@@ -198,18 +182,32 @@ export function TasksColumn() {
     await createTask({ title, event_start: eventStart, entity_id: entityId });
   };
 
-  const handleUpdateTaskFolder = async (taskId: string, folderId: string | null) => {
+  const handleUpdateTaskFolder = useCallback(async (taskId: string, folderId: string | null) => {
     await updateTask({ id: taskId, folder_id: folderId });
-  };
+  }, [updateTask]);
+
+  // Handler pour envoyer une tâche à l'IA (ouvre le chat)
+  const handleSendToAI = useCallback((taskTitle: string) => {
+    // Émettre un événement personnalisé pour ouvrir le chat avec le message
+    const event = new CustomEvent('open-chat-with-message', {
+      detail: { message: `Peux-tu m'aider avec cette tâche : "${taskTitle}" ?` }
+    });
+    window.dispatchEvent(event);
+  }, []);
+
+  // Handler pour ajouter une tâche à un dossier
+  const handleAddToFolder = useCallback(async (taskId: string, folderId: string) => {
+    await updateTask({ id: taskId, folder_id: folderId });
+    await refetch(); // Rafraîchir les données après l'ajout
+  }, [updateTask, refetch]);
 
   const handleRevenueUpdate = async (amount: number) => {
-    console.log('💰 [Tasks] Revenue updated:', amount);
+    const { logger } = await import('@/lib/logger');
+    logger.info('💰 [Tasks] Revenue updated:', amount);
+    // toast.success(`Objectif CA mis à jour: ${amount.toLocaleString()}€`); // Toasts désactivés
     await refetch();
   };
 
-  const handleSlashCommand = async (command: SlashCommand, value: string) => {
-    console.log('🎯 Slash command:', command, value);
-  };
 
   return (
     <div className="h-full flex flex-col relative overflow-visible">
@@ -224,35 +222,28 @@ export function TasksColumn() {
           <>
             {/* Buttons Row */}
             <div className="mb-3 pt-2 flex items-center gap-2">
-              <CalendarButton />
               <GoogleCalendarButton />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowFoldersOverlay(true)}
+                className="text-xs h-7 px-2 text-white/60 hover:text-white/90"
+              >
+                <Folder className="h-3 w-3 mr-1.5" />
+                Dossiers
+              </Button>
             </div>
 
             {/* AI Stats */}
             <div className="px-4 mb-3">
-              <MomentumTracker tasks={allTasks} revenueForecast={revenueForecast} />
+              <MomentumTracker 
+                tasks={allTasks} 
+                revenueForecast={revenueForecast || { forecast: 0, confidence: 0 }} 
+              />
             </div>
-
-            {/* Procrastination Alert */}
-            <ProcrastinationAlert tasks={allTasks} />
 
             {/* Revenue Input */}
             <RevenueInput onUpdate={handleRevenueUpdate} />
-            
-            {/* Notifications auto-création */}
-            <div className="px-4 space-y-2">
-              <AnimatePresence>
-                {autoCreateNotification && (
-                  <AutoCreateNotification
-                    originalTaskTitle={autoCreateNotification.originalTaskTitle}
-                    suggestedTasks={autoCreateNotification.suggestedTasks}
-                    isFollowUp={autoCreateNotification.isFollowUp}
-                    onDismiss={() => setAutoCreateNotification(null)}
-                  />
-                )}
-              </AnimatePresence>
-            </div>
-            
             
             {/* Tasks */}
             <TasksWithFolders 
@@ -265,12 +256,14 @@ export function TasksColumn() {
               onBlock={blockTask}
               onRefetch={refetch}
               onCreateTask={createTask}
+              onSendToAI={handleSendToAI}
+              onAddToFolder={handleAddToFolder}
+              folders={folders}
             />
             
             <div className="pt-3">
               <TaskInput 
                 onAdd={handleAddTask}
-                onSlashCommand={handleSlashCommand}
               />
             </div>
           </>
@@ -281,6 +274,20 @@ export function TasksColumn() {
       <WinCelebration
         trigger={winTrigger}
         onClose={() => setWinTrigger(null)}
+      />
+
+      {/* Folders Overlay */}
+      <FoldersOverlay
+        isOpen={showFoldersOverlay}
+        onClose={() => setShowFoldersOverlay(false)}
+        tasks={allTasks}
+        onToggleTask={handleTaskToggle}
+        onDeleteTask={deleteTask}
+        onUpdateTask={handleUpdateTaskFolder}
+        onDuplicateTask={duplicateTask}
+        onArchiveTask={archiveTask}
+        onBlockTask={blockTask}
+        onRefetch={refetch}
       />
     </div>
   );

@@ -3,20 +3,26 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Task } from '@/types';
+import { Task, Folder } from '@/types';
 import { getCurrentMonth, getCurrentYear, calculateTotalProgress, estimateAmount } from '@/lib/utils';
 import { saveToLocalStorage, loadFromLocalStorage } from '@/lib/utils';
+import { calculateRevenueFromFolders } from '@/lib/revenue';
+import { logger } from '@/lib/logger';
 
 const STORAGE_KEY = 'tekiyo_progress';
 const MONTHLY_GOAL = 50000;
 
-export function useProgress(tasks: Task[]) {
+export function useProgress(tasks: Task[], folders?: Folder[]) {
   const [progress, setProgress] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Calculate current progress from completed tasks
   const currentPercentage = calculateTotalProgress(tasks);
-  const currentAmount = estimateAmount(currentPercentage, MONTHLY_GOAL);
+  
+  // Calculer le CA depuis les dossiers si disponibles, sinon estimation
+  const currentAmount = folders && folders.length > 0
+    ? calculateRevenueFromFolders(folders, tasks)
+    : estimateAmount(currentPercentage, MONTHLY_GOAL);
   
   // Fetch or create current month's progress
   const fetchProgress = useCallback(async () => {
@@ -53,7 +59,12 @@ export function useProgress(tasks: Task[]) {
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('❌ [Progress] Error fetching progress:', error);
+        logger.error('❌ [Progress] Error fetching progress:', {
+          error,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+        });
         throw error;
       }
 
@@ -81,7 +92,10 @@ export function useProgress(tasks: Task[]) {
         }
       }
     } catch (error) {
-      console.error('Error fetching progress:', error);
+      logger.error('❌ [Progress] Error fetching progress:', {
+        error: error instanceof Error ? error.message : String(error),
+        errorObject: error,
+      });
       // Fallback to localStorage
       const localProgress = loadFromLocalStorage<any>(STORAGE_KEY, null);
       setProgress(localProgress);
@@ -92,7 +106,10 @@ export function useProgress(tasks: Task[]) {
 
   // Update progress in database
   const updateProgress = useCallback(async (percentage: number, amount: number) => {
-    if (!progress) return;
+    if (!progress) {
+      logger.warn('⚠️ [Progress] No progress data available, skipping update');
+      return;
+    }
 
     try {
       if (!supabase) {
@@ -103,18 +120,58 @@ export function useProgress(tasks: Task[]) {
         return;
       }
 
+      // Vérifier que progress.id existe avant de faire l'update
+      if (!progress.id) {
+        logger.warn('⚠️ [Progress] Progress ID is missing, creating new record');
+        // Créer un nouveau record si l'ID n'existe pas
+        const month = getCurrentMonth();
+        const year = getCurrentYear();
+        const { data: newData, error: createError } = await supabase
+          .from('progress')
+          .insert({
+            month,
+            year,
+            total_percentage: percentage,
+            amount_generated: amount,
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          logger.error('❌ [Progress] Error creating progress:', createError);
+          // Fallback to localStorage
+          const updatedProgress = { ...progress, total_percentage: percentage, amount_generated: amount };
+          setProgress(updatedProgress);
+          saveToLocalStorage(STORAGE_KEY, updatedProgress);
+          return;
+        }
+
+        if (newData) {
+          setProgress(newData);
+          saveToLocalStorage(STORAGE_KEY, newData);
+        }
+        return;
+      }
+
       const { data, error } = await supabase
         .from('progress')
         .update({
           total_percentage: percentage,
           amount_generated: amount,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', progress.id)
         .select()
         .single();
 
       if (error) {
-        console.error('❌ [Progress] Supabase error:', error);
+        logger.error('❌ [Progress] Supabase error:', {
+          error,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+          progressId: progress.id,
+        });
         // Fallback to localStorage if Supabase fails
         const updatedProgress = { ...progress, total_percentage: percentage, amount_generated: amount };
         setProgress(updatedProgress);
@@ -127,7 +184,11 @@ export function useProgress(tasks: Task[]) {
         saveToLocalStorage(STORAGE_KEY, data);
       }
     } catch (error) {
-      console.error('❌ [Progress] Error updating progress:', error instanceof Error ? error.message : JSON.stringify(error));
+      logger.error('❌ [Progress] Error updating progress:', {
+        error: error instanceof Error ? error.message : String(error),
+        errorObject: error,
+        progressId: progress?.id,
+      });
       // Fallback to localStorage on any error
       if (progress) {
         const updatedProgress = { ...progress, total_percentage: percentage, amount_generated: amount };
@@ -193,7 +254,10 @@ export function useProgress(tasks: Task[]) {
         saveToLocalStorage(STORAGE_KEY, data);
       }
     } catch (error) {
-      console.error('Error archiving progress:', error);
+      logger.error('❌ [Progress] Error archiving progress:', {
+        error: error instanceof Error ? error.message : String(error),
+        errorObject: error,
+      });
     }
   };
 

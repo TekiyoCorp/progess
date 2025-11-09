@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Folder, CreateFolderInput, UpdateFolderInput, Task } from '@/types';
 import { supabase } from '@/lib/supabase';
+// import { toast } from '@/lib/toast'; // Toasts désactivés
+import { logger } from '@/lib/logger';
 
 export function useFolders() {
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -15,7 +17,7 @@ export function useFolders() {
     
     // Supabase Realtime subscription
     if (supabase) {
-      console.log('📡 [Folders] Setting up Realtime subscription...');
+      logger.info('📡 [Folders] Setting up Realtime subscription...');
       
       const channel = supabase
         .channel('public:folders')
@@ -23,16 +25,16 @@ export function useFolders() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'folders' },
           (payload: any) => {
-            console.log('🔥 [Folders] Realtime event:', payload.eventType, payload.new);
+            logger.info('🔥 [Folders] Realtime event:', payload.eventType, payload.new);
             fetchFolders();
           }
         )
         .subscribe((status: any) => {
-          console.log('📡 [Folders] Subscription status:', status);
+          logger.info('📡 [Folders] Subscription status:', status);
         });
       
       return () => {
-        console.log('🔌 [Folders] Cleaning up Realtime subscription...');
+        logger.info('🔌 [Folders] Cleaning up Realtime subscription...');
         supabase.removeChannel(channel);
       };
     }
@@ -59,7 +61,7 @@ export function useFolders() {
       if (error) throw error;
       setFolders(data || []);
     } catch (error) {
-      console.error('Error fetching folders:', error);
+      logger.error('Error fetching folders:', error);
       // Fallback localStorage
       const storedFolders = localStorage.getItem('folders');
       if (storedFolders) {
@@ -82,6 +84,7 @@ export function useFolders() {
 
       if (!supabase) {
         // Fallback localStorage
+        // toast.success(`Dossier créé: ${newFolder.name}`); // Toasts désactivés
         const updatedFolders = [...folders, newFolder];
         setFolders(updatedFolders);
         localStorage.setItem('folders', JSON.stringify(updatedFolders));
@@ -99,17 +102,19 @@ export function useFolders() {
 
       if (error) throw error;
 
+      // toast.success(`Dossier créé: ${data.name}`); // Toasts désactivés
       setFolders([...folders, data]);
       return data;
     } catch (error) {
-      console.error('Error creating folder:', error);
+      logger.error('Error creating folder:', error);
+      // toast.error('Erreur lors de la création du dossier'); // Toasts désactivés
       return null;
     }
   };
 
   const updateFolder = async (input: UpdateFolderInput): Promise<void> => {
     try {
-      console.log('💰 [Folders] Updating folder:', input);
+      logger.info('💰 [Folders] Updating folder:', input);
       
       if (!supabase) {
         // Fallback localStorage
@@ -120,7 +125,7 @@ export function useFolders() {
         );
         setFolders(updatedFolders);
         localStorage.setItem('folders', JSON.stringify(updatedFolders));
-        console.log('💰 [Folders] Updated in localStorage:', updatedFolders.find(f => f.id === input.id));
+        logger.info('💰 [Folders] Updated in localStorage:', updatedFolders.find(f => f.id === input.id));
         return;
       }
 
@@ -131,7 +136,7 @@ export function useFolders() {
       if (input.order_index !== undefined) updates.order_index = input.order_index;
       if (input.price !== undefined) updates.price = input.price;
 
-      console.log('💰 [Folders] Supabase update object:', updates);
+      logger.info('💰 [Folders] Supabase update object:', updates);
 
       const { data, error } = await supabase
         .from('folders')
@@ -140,12 +145,13 @@ export function useFolders() {
         .select();
 
       if (error) {
-        console.error('❌ [Folders] Supabase error:', error);
+        logger.error('❌ [Folders] Supabase error:', error);
         throw error;
       }
 
-      console.log('✅ [Folders] Supabase updated:', data);
+      logger.info('✅ [Folders] Supabase updated:', data);
 
+      // toast.success('Dossier mis à jour'); // Toasts désactivés
       setFolders(folders.map(f =>
         f.id === input.id ? { ...f, ...input, updated_at: new Date().toISOString() } : f
       ));
@@ -155,9 +161,10 @@ export function useFolders() {
         f.id === input.id ? { ...f, ...input } : f
       );
       localStorage.setItem('folders', JSON.stringify(updatedFolders));
-      console.log('💾 [Folders] Synced to localStorage');
+      logger.info('💾 [Folders] Synced to localStorage');
     } catch (error) {
-      console.error('❌ [Folders] Error updating folder:', error instanceof Error ? error.message : error);
+      logger.error('❌ [Folders] Error updating folder:', error instanceof Error ? error.message : error);
+      // toast.error('Erreur lors de la mise à jour du dossier'); // Toasts désactivés
     }
   };
 
@@ -165,6 +172,7 @@ export function useFolders() {
     try {
       if (!supabase) {
         // Fallback localStorage
+        // toast.success('Dossier supprimé'); // Toasts désactivés
         const updatedFolders = folders.filter(f => f.id !== id);
         setFolders(updatedFolders);
         localStorage.setItem('folders', JSON.stringify(updatedFolders));
@@ -178,9 +186,11 @@ export function useFolders() {
 
       if (error) throw error;
 
+      // toast.success('Dossier supprimé'); // Toasts désactivés
       setFolders(folders.filter(f => f.id !== id));
     } catch (error) {
-      console.error('Error deleting folder:', error);
+      logger.error('Error deleting folder:', error);
+      // toast.error('Erreur lors de la suppression du dossier'); // Toasts désactivés
     }
   };
 
@@ -201,7 +211,7 @@ export function useFolders() {
 
       await updateFolder({ id: folderId, summary });
     } catch (error) {
-      console.error('Error generating folder summary:', error);
+      logger.error('Error generating folder summary:', error);
     } finally {
       setGeneratingSummary(null);
     }

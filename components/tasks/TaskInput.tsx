@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2, Calendar as CalendarIcon } from 'lucide-react';
-import { SlashCommandMenu, SlashCommand } from './SlashCommandMenu';
-import { TaskSuggestions } from './TaskSuggestions';
 import { MentionDropdown } from './MentionDropdown';
 import { EntityClassificationModal } from '@/components/entities/EntityClassificationModal';
 import { Calendar } from '@/components/ui/calendar';
@@ -13,29 +11,22 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useEntities } from '@/hooks/useEntities';
-import { TaskSuggestion, Entity } from '@/types';
+import { Entity } from '@/types';
 import { AnimatePresence } from 'framer-motion';
 
 interface TaskInputProps {
   onAdd: (title: string, eventStart?: string, entityId?: string) => Promise<void>;
-  onSlashCommand?: (command: SlashCommand, value: string) => void;
 }
 
-export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
+export function TaskInput({ onAdd }: TaskInputProps) {
   const [value, setValue] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedHour, setSelectedHour] = useState<string>('09');
   const [selectedMinute, setSelectedMinute] = useState<string>('00');
   const [showCalendar, setShowCalendar] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  // Autocomplétion
-  const [suggestions, setSuggestions] = useState<TaskSuggestion[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestTimeout, setSuggestTimeout] = useState<NodeJS.Timeout | null>(null);
   
   // Mentions
   const { entities, createEntity, searchEntities } = useEntities();
@@ -51,49 +42,9 @@ export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
     return `${format(selectedDate, 'dd/MM', { locale: fr })} - ${selectedHour}h${selectedMinute}`;
   };
 
-  // Fetch suggestions from AI
-  const fetchSuggestions = async (input: string) => {
-    if (input.length < 3) {
-      setSuggestions([]);
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/tasks/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input }),
-      });
-
-      const data = await res.json();
-      setSuggestions(data.suggestions || []);
-    } catch (error) {
-      console.error('Error fetching suggestions:', error);
-      setSuggestions([]);
-    }
-  };
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
-
-    // Détecter le "/"
-    if (newValue === '/') {
-      setShowSlashMenu(true);
-      setShowSuggestions(false);
-      setShowMentions(false);
-      
-      if (inputRef.current) {
-        const rect = inputRef.current.getBoundingClientRect();
-        setMenuPosition({
-          top: rect.bottom,
-          left: rect.left,
-        });
-      }
-      return;
-    } else {
-      setShowSlashMenu(false);
-    }
 
     // Détecter le "<" (équivalent de @)
     const atMatch = newValue.match(/<(\w*)$/);
@@ -101,7 +52,6 @@ export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
       const search = atMatch[1];
       setMentionSearch(search);
       setShowMentions(true);
-      setShowSuggestions(false);
       
       if (inputRef.current) {
         const rect = inputRef.current.getBoundingClientRect();
@@ -114,45 +64,6 @@ export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
     } else {
       setShowMentions(false);
     }
-
-    // Autocomplétion intelligente (après 3 caractères, avec debounce)
-    if (newValue.length >= 3 && !newValue.includes('<') && !newValue.includes('/')) {
-      if (suggestTimeout) {
-        clearTimeout(suggestTimeout);
-      }
-      
-      const timeout = setTimeout(() => {
-        if (inputRef.current) {
-          const rect = inputRef.current.getBoundingClientRect();
-          setMenuPosition({
-            top: rect.bottom,
-            left: rect.left,
-          });
-        }
-        fetchSuggestions(newValue);
-        setShowSuggestions(true);
-      }, 800);
-      
-      setSuggestTimeout(timeout);
-    } else {
-      setShowSuggestions(false);
-      setSuggestions([]);
-    }
-  };
-
-  const handleSlashCommand = (command: SlashCommand) => {
-    setShowSlashMenu(false);
-    setValue('');
-    
-    if (onSlashCommand) {
-      onSlashCommand(command, value.slice(1));
-    }
-  };
-
-  const handleSelectSuggestion = (title: string) => {
-    setValue(title);
-    setShowSuggestions(false);
-    setSuggestions([]);
   };
 
   const handleSelectEntity = (entity: Entity | null) => {
@@ -196,7 +107,7 @@ export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!value.trim() || loading || value === '/' || value.includes('<')) return;
+    if (!value.trim() || loading || value.includes('<')) return;
 
     setLoading(true);
     try {
@@ -214,7 +125,6 @@ export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
       setSelectedHour('09');
       setSelectedMinute('00');
       setSelectedEntity(null);
-      setSuggestions([]);
     } catch (error) {
       console.error('Error adding task:', error);
     } finally {
@@ -323,25 +233,6 @@ export function TaskInput({ onAdd, onSlashCommand }: TaskInputProps) {
           </span>
         )}
       </form>
-
-      {/* Slash Commands */}
-      <SlashCommandMenu
-        isOpen={showSlashMenu}
-        onSelect={handleSlashCommand}
-        onClose={() => setShowSlashMenu(false)}
-        position={menuPosition}
-      />
-
-      {/* Suggestions intelligentes */}
-      <AnimatePresence>
-        {showSuggestions && suggestions.length > 0 && (
-          <TaskSuggestions
-            suggestions={suggestions}
-            onSelect={handleSelectSuggestion}
-            position={menuPosition}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Mentions dropdown */}
       <AnimatePresence>

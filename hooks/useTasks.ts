@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Task, CreateTaskInput, UpdateTaskInput, TaskFilter } from '@/types';
 import { saveToLocalStorage, loadFromLocalStorage } from '@/lib/utils';
+// import { toast } from '@/lib/toast'; // Toasts désactivés
+import { logger } from '@/lib/logger';
 
 const STORAGE_KEY = 'tekiyo_tasks';
 
@@ -18,7 +20,7 @@ export function useTasks() {
     try {
       // Check if supabase is available
       if (!supabase) {
-        console.log('Using localStorage for tasks');
+        logger.info('Using localStorage for tasks');
         const localTasks = loadFromLocalStorage<Task[]>(STORAGE_KEY, []);
         setTasks(localTasks);
         setLoading(false);
@@ -45,7 +47,7 @@ export function useTasks() {
         saveToLocalStorage(STORAGE_KEY, tasksWithParsedAttachments);
       }
     } catch (error) {
-      console.error('Error fetching tasks:', error);
+      logger.error('Error fetching tasks:', error);
       // Fallback to localStorage
       const localTasks = loadFromLocalStorage<Task[]>(STORAGE_KEY, []);
       setTasks(localTasks);
@@ -60,7 +62,7 @@ export function useTasks() {
     
     // Supabase Realtime subscription
     if (supabase) {
-      console.log('📡 [Tasks] Setting up Realtime subscription...');
+      logger.info('📡 [Tasks] Setting up Realtime subscription...');
       
       const channel = supabase
         .channel('public:tasks')
@@ -68,16 +70,16 @@ export function useTasks() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'tasks' },
           (payload: any) => {
-            console.log('🔥 [Tasks] Realtime event:', payload.eventType, payload.new);
+            logger.info('🔥 [Tasks] Realtime event:', payload.eventType, payload.new);
             fetchTasks();
           }
         )
         .subscribe((status: any) => {
-          console.log('📡 [Tasks] Subscription status:', status);
+          logger.info('📡 [Tasks] Subscription status:', status);
         });
       
       return () => {
-        console.log('🔌 [Tasks] Cleaning up Realtime subscription...');
+        logger.info('🔌 [Tasks] Cleaning up Realtime subscription...');
         supabase.removeChannel(channel);
       };
     }
@@ -104,7 +106,7 @@ export function useTasks() {
           type = scoreData.type || 'other';
         }
       } catch (aiError) {
-        console.log('AI scoring unavailable, using default percentage');
+        logger.info('AI scoring unavailable, using default percentage');
       }
 
       // Si event_start est fourni, créer l'événement dans Google Calendar
@@ -114,7 +116,7 @@ export function useTasks() {
           const { data: { session } } = await supabase.auth.getSession();
           
           if (session?.provider_token) {
-            console.log('📅 [Create Task] Creating calendar event...');
+            logger.info('📅 [Create Task] Creating calendar event...');
             
             // Calculer endDateTime (1h après start)
             const startDate = new Date(input.event_start);
@@ -135,14 +137,14 @@ export function useTasks() {
             if (eventResponse.ok) {
               const eventData = await eventResponse.json();
               eventId = eventData.event.id;
-              console.log('✅ [Create Task] Calendar event created:', eventId);
+              logger.info('✅ [Create Task] Calendar event created:', eventId);
             } else {
               const errorData = await eventResponse.json().catch(() => ({ error: 'Unknown error' }));
-              console.error('❌ [Create Task] Failed to create calendar event:', errorData);
+              logger.error('❌ [Create Task] Failed to create calendar event:', errorData);
             }
           }
         } catch (calendarError) {
-          console.error('❌ [Create Task] Error creating calendar event:', calendarError);
+          logger.error('❌ [Create Task] Error creating calendar event:', calendarError);
           // Continue même si la création du calendar échoue
         }
       }
@@ -168,7 +170,7 @@ export function useTasks() {
             // Auto-organisation par l'IA si une entité est liée
             if (input.entity_id) {
               try {
-                console.log('🤖 [Create Task] Auto-organizing with AI...');
+                logger.info('🤖 [Create Task] Auto-organizing with AI...');
                 const organizeResponse = await fetch('/api/tasks/auto-organize', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -177,13 +179,15 @@ export function useTasks() {
 
                 if (organizeResponse.ok) {
                   const organizeData = await organizeResponse.json();
-                  console.log('✅ [Create Task] Auto-organized:', organizeData);
+                  logger.info('✅ [Create Task] Auto-organized:', organizeData);
                 }
               } catch (organizeError) {
-                console.error('⚠️ [Create Task] Auto-organize failed (non-critical):', organizeError);
+                logger.error('⚠️ [Create Task] Auto-organize failed (non-critical):', organizeError);
               }
             }
 
+            // toast.success(`Tâche créée: ${data.title}`); // Toasts désactivés
+            
             setTasks(prev => {
               const updated = [...prev, data];
               saveToLocalStorage(STORAGE_KEY, updated);
@@ -207,7 +211,7 @@ export function useTasks() {
                   if (autoCreateResponse.ok) {
                     const autoData = await autoCreateResponse.json();
                     if (autoData.tasks && autoData.tasks.length > 0) {
-                      console.log('🤖 [Auto-Create] Suggested tasks:', autoData.tasks);
+                      logger.info('🤖 [Auto-Create] Suggested tasks:', autoData.tasks);
                       // Dispatcher un événement pour afficher les suggestions
                       window.dispatchEvent(new CustomEvent('tasks-auto-suggested', {
                         detail: { originalTask: data, suggestedTasks: autoData.tasks }
@@ -215,7 +219,7 @@ export function useTasks() {
                     }
                   }
                 } catch (err) {
-                  console.error('⚠️ [Auto-Create] Error:', err);
+                  logger.error('⚠️ [Auto-Create] Error:', err);
                 }
               }, 500);
               
@@ -224,7 +228,7 @@ export function useTasks() {
             return data;
           }
         } catch (dbError) {
-          console.log('Supabase unavailable, using localStorage');
+          logger.info('Supabase unavailable, using localStorage');
         }
       }
 
@@ -242,6 +246,8 @@ export function useTasks() {
         updated_at: new Date().toISOString(),
       };
       
+      // toast.success(`Tâche créée: ${newTask.title}`); // Toasts désactivés
+      
       setTasks(prev => {
         const updated = [...prev, newTask];
         saveToLocalStorage(STORAGE_KEY, updated);
@@ -249,14 +255,15 @@ export function useTasks() {
       });
       return newTask;
     } catch (error) {
-      console.error('Error creating task:', error);
+      logger.error('Error creating task:', error);
+      // toast.error('Erreur lors de la création de la tâche'); // Toasts désactivés
       return null;
     }
   };
 
   // Update task
   const updateTask = async (input: UpdateTaskInput): Promise<void> => {
-    console.log('🔧 [updateTask] Updating task:', input);
+    logger.info('🔧 [updateTask] Updating task:', input);
     
     try {
       if (!supabase) {
@@ -278,7 +285,7 @@ export function useTasks() {
               ...(input.block_reason !== undefined && { block_reason: input.block_reason }),
               updated_at: new Date().toISOString(),
             };
-            console.log('✅ [updateTask] Task updated in state:', updated);
+            logger.info('✅ [updateTask] Task updated in state:', updated);
             return updated;
           }
           return task;
@@ -286,7 +293,7 @@ export function useTasks() {
         
         setTasks(updatedTasks as Task[]);
         saveToLocalStorage(STORAGE_KEY, updatedTasks);
-        console.log('💾 [updateTask] Saved to localStorage');
+        logger.info('💾 [updateTask] Saved to localStorage');
         return;
       }
 
@@ -312,6 +319,7 @@ export function useTasks() {
       if (error) throw error;
 
       if (data) {
+        // toast.success('Tâche mise à jour'); // Toasts désactivés
         setTasks(prev => {
           const updated = prev.map(task => task.id === input.id ? data : task);
           saveToLocalStorage(STORAGE_KEY, updated);
@@ -319,7 +327,8 @@ export function useTasks() {
         });
       }
       } catch (error) {
-        console.error('Error updating task:', error);
+        logger.error('Error updating task:', error);
+        // toast.error('Erreur lors de la mise à jour de la tâche'); // Toasts désactivés
         
         // Fallback: update locally
         const updatedTasks = tasks.map(task => {
@@ -358,11 +367,13 @@ export function useTasks() {
 
       if (error) throw error;
 
+      // toast.success('Tâche supprimée'); // Toasts désactivés
       setTasks(prev => prev.filter(task => task.id !== id));
       const filteredTasks = tasks.filter(task => task.id !== id);
       saveToLocalStorage(STORAGE_KEY, filteredTasks);
     } catch (error) {
-      console.error('Error deleting task:', error);
+      logger.error('Error deleting task:', error);
+      // toast.error('Erreur lors de la suppression de la tâche'); // Toasts désactivés
       
       // Fallback: delete locally
       setTasks(prev => prev.filter(task => task.id !== id));
@@ -401,14 +412,14 @@ export function useTasks() {
             if (autoCreateResponse.ok) {
               const autoData = await autoCreateResponse.json();
               if (autoData.tasks && autoData.tasks.length > 0) {
-                console.log('🤖 [Auto-Create] Follow-up tasks:', autoData.tasks);
+                logger.info('🤖 [Auto-Create] Follow-up tasks:', autoData.tasks);
                 window.dispatchEvent(new CustomEvent('tasks-auto-suggested', {
                   detail: { originalTask: task, suggestedTasks: autoData.tasks, isFollowUp: true }
                 }));
               }
             }
           } catch (err) {
-            console.error('⚠️ [Auto-Create] Error:', err);
+            logger.error('⚠️ [Auto-Create] Error:', err);
           }
         }, 500);
       }
@@ -468,7 +479,7 @@ export function useTasks() {
         return data.groups || [];
       }
     } catch (error) {
-      console.error('Error auto-grouping:', error);
+      logger.error('Error auto-grouping:', error);
     }
     return [];
   };

@@ -8,6 +8,8 @@ import { ProgressStats } from '@/components/progress/ProgressStats';
 import { ConfettiAnimation } from '@/components/progress/ConfettiAnimation';
 import { AICommandInput } from '@/components/ai/AICommandInput';
 import { useTasks } from '@/hooks/useTasks';
+import { useFolders } from '@/hooks/useFolders';
+import { useProblems } from '@/hooks/useProblems';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -22,6 +24,8 @@ export function ProgressColumn({ percentage, amount, monthlyGoal }: ProgressColu
   const [hasReached100, setHasReached100] = useState(false);
   const [aiSummary, setAiSummary] = useState<string>('');
   const { allTasks, refetch } = useTasks();
+  const { folders } = useFolders();
+  const { problems } = useProblems();
 
   useEffect(() => {
     if (percentage >= 100 && !hasReached100) {
@@ -42,14 +46,27 @@ export function ProgressColumn({ percentage, amount, monthlyGoal }: ProgressColu
     .filter(task => !task.completed)
     .sort((a, b) => b.percentage - a.percentage)[0];
 
-  // Générer le résumé IA au chargement
+  // Générer le Daily Brief au chargement
   useEffect(() => {
     const generateSummary = async () => {
       try {
+        // Calculer le CA réel depuis les dossiers
+        const { calculateRevenueFromFolders } = await import('@/lib/revenue');
+        const realAmount = calculateRevenueFromFolders(folders, allTasks);
+        
         const response = await fetch('/api/ai/daily-summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tasks: allTasks }),
+          body: JSON.stringify({ 
+            tasks: allTasks,
+            folders: folders.map(f => ({
+              ...f,
+              tasks: allTasks.filter(t => t.folder_id === f.id),
+            })),
+            problems: problems,
+            currentAmount: realAmount || amount, // Utiliser le CA réel calculé depuis les dossiers
+            monthlyGoal: monthlyGoal,
+          }),
         });
 
         if (response.ok) {
@@ -61,10 +78,10 @@ export function ProgressColumn({ percentage, amount, monthlyGoal }: ProgressColu
       }
     };
 
-    if (allTasks.length > 0) {
+    if (allTasks.length > 0 || folders.length > 0) {
       generateSummary();
     }
-  }, [allTasks.length]);
+  }, [allTasks.length, amount, monthlyGoal, folders, problems]);
 
   return (
     <div className="h-full flex flex-col" style={{ fontSize: '0.94rem' }}>
@@ -133,7 +150,8 @@ export function ProgressColumn({ percentage, amount, monthlyGoal }: ProgressColu
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-sm text-white/80 leading-relaxed"
+            className="text-sm text-white/80 leading-relaxed break-words overflow-wrap-anywhere"
+            style={{ wordBreak: 'break-word' }}
           >
             {aiSummary}
           </motion.div>

@@ -16,6 +16,21 @@ export function useGoogleCalendar() {
   useEffect(() => {
     checkAuthStatus();
 
+    // Vérifier périodiquement le token (toutes les 10 minutes)
+    const tokenCheckInterval = setInterval(() => {
+      const savedToken = loadToken();
+      if (!savedToken && supabase) {
+        // Essayer de rafraîchir depuis Supabase
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.provider_token) {
+            saveToken(session.provider_token);
+            setAccessToken(session.provider_token);
+            setIsAuthenticated(true);
+          }
+        });
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+
     // Listen for auth state changes
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
@@ -41,14 +56,19 @@ export function useGoogleCalendar() {
 
       return () => {
         subscription.unsubscribe();
+        clearInterval(tokenCheckInterval);
       };
     }
+    
+    return () => {
+      clearInterval(tokenCheckInterval);
+    };
   }, []);
 
-  const saveToken = (token: string) => {
+  const saveToken = (token: string, expiresIn?: number) => {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    // Token valide pour 1 heure par défaut
-    const expiry = Date.now() + 3600 * 1000;
+    // Token valide pour expiresIn secondes ou 1 heure par défaut
+    const expiry = Date.now() + (expiresIn ? expiresIn * 1000 : 3600 * 1000);
     localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toString());
   };
 
@@ -58,12 +78,30 @@ export function useGoogleCalendar() {
 
     if (!token || !expiry) return null;
 
-    // Vérifier si le token n'est pas expiré
-    if (Date.now() > parseInt(expiry)) {
-      console.log('⚠️ [Calendar] Token expired, clearing');
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      localStorage.removeItem(TOKEN_EXPIRY_KEY);
-      return null;
+    // Vérifier si le token n'est pas expiré (avec marge de 5 minutes)
+    const expiryTime = parseInt(expiry);
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    
+    if (now > expiryTime - fiveMinutes) {
+      console.log('⚠️ [Calendar] Token expired or expiring soon, attempting refresh');
+      // Essayer de rafraîchir le token via Supabase
+      if (supabase) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.provider_token) {
+            saveToken(session.provider_token);
+            setAccessToken(session.provider_token);
+          } else {
+            localStorage.removeItem(TOKEN_STORAGE_KEY);
+            localStorage.removeItem(TOKEN_EXPIRY_KEY);
+          }
+        });
+      }
+      
+      // Si le token est vraiment expiré, retourner null
+      if (now > expiryTime) {
+        return null;
+      }
     }
 
     return token;
