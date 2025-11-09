@@ -21,17 +21,6 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-interface ChatAuditLog {
-  id: string;
-  message: string;
-  actions: any[];
-  timestamp: string;
-  context: {
-    tasksCount: number;
-    foldersCount: number;
-  };
-}
-
 export function ChatColumn() {
   const { allTasks, createTask, updateTask, deleteTask } = useTasks();
   const { folders, createFolder, updateFolder, deleteFolder } = useFolders();
@@ -75,10 +64,11 @@ export function ChatColumn() {
         case 'create_task':
           await createTask({
             title: action.data.title,
-            percentage: action.data.percentage,
-            type: action.data.type,
-            event_start: action.data.event_start,
-            entity_id: action.data.entity_id,
+            ...(action.data.percentage && { percentage: action.data.percentage }),
+            ...(action.data.type && { type: action.data.type }),
+            ...(action.data.event_start && { event_start: action.data.event_start }),
+            ...(action.data.entity_id && { entity_id: action.data.entity_id }),
+            ...(action.data.folder_id && { folder_id: action.data.folder_id }),
           });
           return { success: true };
         case 'update_task':
@@ -193,7 +183,7 @@ export function ChatColumn() {
         }
         
         // Logger les actions pour audit trail
-        const auditLog: ChatAuditLog = {
+        const auditLog = {
           id: Date.now().toString(),
           message: input.trim(),
           response: data.message,

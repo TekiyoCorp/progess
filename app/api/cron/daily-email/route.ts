@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { calculateRevenueFromFolders } from '@/lib/revenue';
 
 // Cette route peut être appelée par Vercel Cron Jobs ou un service externe
 // Pour Vercel: ajouter dans vercel.json:

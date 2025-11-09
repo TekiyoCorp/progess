@@ -21,7 +21,8 @@ export function useGoogleCalendar() {
       const savedToken = loadToken();
       if (!savedToken && supabase) {
         // Essayer de rafraîchir depuis Supabase
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then((response: any) => {
+          const session = response?.data?.session;
           if (session?.provider_token) {
             saveToken(session.provider_token);
             setAccessToken(session.provider_token);
@@ -87,7 +88,8 @@ export function useGoogleCalendar() {
       console.log('⚠️ [Calendar] Token expired or expiring soon, attempting refresh');
       // Essayer de rafraîchir le token via Supabase
       if (supabase) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then((response: any) => {
+          const session = response?.data?.session;
           if (session?.provider_token) {
             saveToken(session.provider_token);
             setAccessToken(session.provider_token);

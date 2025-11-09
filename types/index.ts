@@ -81,6 +81,7 @@ export interface CreateFolderInput {
   name: string;
   order_index?: number;
   color?: string;
+  price?: number;
 }
 
 export interface UpdateFolderInput {
