@@ -20,7 +20,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { logger } from '@/lib/logger';
 
-export function TasksColumn() {
+interface TasksColumnProps {
+  onToggleFolders?: () => void;
+}
+
+export function TasksColumn({ onToggleFolders }: TasksColumnProps = {}) {
   const {
     tasks,
     allTasks,
@@ -186,14 +190,6 @@ export function TasksColumn() {
     await updateTask({ id: taskId, folder_id: folderId });
   }, [updateTask]);
 
-  // Handler pour envoyer une tâche à l'IA (ouvre le chat)
-  const handleSendToAI = useCallback((taskTitle: string) => {
-    // Émettre un événement personnalisé pour ouvrir le chat avec le message
-    const event = new CustomEvent('open-chat-with-message', {
-      detail: { message: `Peux-tu m'aider avec cette tâche : "${taskTitle}" ?` }
-    });
-    window.dispatchEvent(event);
-  }, []);
 
   // Handler pour ajouter une tâche à un dossier
   const handleAddToFolder = useCallback(async (taskId: string, folderId: string) => {
@@ -226,7 +222,13 @@ export function TasksColumn() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowFoldersOverlay(true)}
+                onClick={() => {
+                  if (onToggleFolders) {
+                    onToggleFolders();
+                  } else {
+                    setShowFoldersOverlay(true);
+                  }
+                }}
                 className="text-xs h-7 px-2 text-white/60 hover:text-white/90"
               >
                 <Folder className="h-3 w-3 mr-1.5" />
@@ -256,7 +258,6 @@ export function TasksColumn() {
               onBlock={blockTask}
               onRefetch={refetch}
               onCreateTask={createTask}
-              onSendToAI={handleSendToAI}
               onAddToFolder={handleAddToFolder}
               folders={folders}
             />
